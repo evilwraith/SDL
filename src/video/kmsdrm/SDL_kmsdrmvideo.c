@@ -1457,7 +1457,8 @@ int SDL_KMSDRM_GetGBMHandles(SDL_Window *window, struct gbm_device **out_dev, st
     if ((uintptr_t)viddata->gbm_dev == 0x1) {
         *out_dev = NULL;
         *out_surf = NULL;
-        return 0;
+        SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: mock GBM sentinel detected; refusing to hand out GBM handles.");
+        return -1;  /* treat as failure so callers don't proceed with NULL handles */
     }
 
     if (!viddata->gbm_dev || !windata->gs) {
@@ -1496,7 +1497,7 @@ void SDL_KMSDRM_GetBGFXPlatformData(SDL_Window *window, bgfx_platform_data_t *pd
     memset(&tmp, 0, sizeof(tmp));
 
     // For KMSDRM, use the DRM fd as the "native display type" and the GBM surface as the window handle.
-    tmp.ndt = (void *)(uintptr_t)viddata->drm_fd;
+    tmp.ndt = (void*)viddata->gbm_dev; // Changed from drm_fd to gbm_device*
     tmp.nwh = (void *)(uintptr_t)gbm_surf;
 
     *pd = tmp;
