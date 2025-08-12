@@ -53,10 +53,12 @@
 #define EGL_COLOR_COMPONENT_TYPE_FLOAT_EXT 0x333B
 #endif // EGL_EXT_pixel_format_float
 
-#ifndef EGL_EXT_platform_device
-#define EGL_EXT_platform_device 1
-#define EGL_PLATFORM_DEVICE_EXT 0x313F
-#endif // EGL_EXT_platform_device
+/** If we happen to not have this defined because of an older EGL version, just define it 0x0
+    as eglGetPlatformDisplayEXT will most likely be NULL if this is missing
+*/
+#ifndef EGL_PLATFORM_DEVICE_EXT
+#define EGL_PLATFORM_DEVICE_EXT 0x0
+#endif
 
 #ifndef EGL_EXT_present_opaque
 #define EGL_EXT_present_opaque 1
@@ -258,7 +260,7 @@ SDL_FunctionPointer SDL_EGL_GetProcAddressInternal(SDL_VideoDevice *_this, const
             result = _this->egl_data->eglGetProcAddress(proc);
         }
 
-#if !defined(SDL_VIDEO_DRIVER_VITA)
+#if !defined(SDL_PLATFORM_EMSCRIPTEN) && !defined(SDL_VIDEO_DRIVER_VITA) // LoadFunction isn't needed on Emscripten and will call dlsym(), causing other problems.
         // Try SDL_LoadFunction() first for EGL <= 1.4, or as a fallback for >= 1.5.
         if (!result) {
             result = SDL_LoadFunction(_this->egl_data->opengl_dll_handle, proc);
@@ -550,6 +552,18 @@ bool SDL_EGL_LoadLibrary(SDL_VideoDevice *_this, const char *egl_path, NativeDis
         (_this->egl_data->eglGetDisplay) &&
         SDL_GetHintBoolean(SDL_HINT_VIDEO_EGL_ALLOW_GETDISPLAY_FALLBACK, true)) {
         _this->egl_data->egl_display = _this->egl_data->eglGetDisplay(native_display);
+                if (_this->egl_data->egl_display == EGL_NO_DISPLAY) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "EGL: eglGetDisplay(native) failed — trying EGL_DEFAULT_DISPLAY");
+            _this->egl_data->egl_display = _this->egl_data->eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        }
+#ifdef EGL_PLATFORM_SURFACELESS_MESA
+        if (_this->egl_data->egl_display == EGL_NO_DISPLAY) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "EGL: DEFAULT failed — trying EGL_PLATFORM_SURFACELESS_MESA");
+            if (_this->egl_data->eglGetPlatformDisplay) {
+                _this->egl_data->egl_display = _this->egl_data->eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
+            }
+        }
+#endif
     }
     if (_this->egl_data->egl_display == EGL_NO_DISPLAY) {
         _this->gl_config.driver_loaded = 0;

@@ -45,6 +45,7 @@
 #include "SDL_kmsdrmevents.h"
 #include "SDL_kmsdrmmouse.h"
 #include "SDL_kmsdrmvideo.h"
+#include <bgfx/c99/bgfx.h> // for bgfx_platform_data_t
 #include "SDL_kmsdrmopengles.h"
 #include "SDL_kmsdrmvulkan.h"
 #include <dirent.h>
@@ -1110,9 +1111,16 @@ static bool KMSDRM_GBMInit(SDL_VideoDevice *_this, SDL_DisplayData *dispdata)
 
     // Create the GBM device.
     viddata->gbm_dev = KMSDRM_gbm_create_device(viddata->drm_fd);
+	
+	SDL_Log("KMSDRM: Attempted KMSDRM_gbm_create_device(fd=%d), result = %p", viddata->drm_fd, viddata->gbm_dev);
+	
     if (!viddata->gbm_dev) {
-        result = SDL_SetError("Couldn't create gbm device.");
-    }
+    //    result = SDL_SetError("Couldn't create gbm device.");
+    SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: GBM device creation failed. libmali may not support GBM properly.");
+        SDL_Log("KMSDRM: Mocking gbm_device to bypass failure");
+        viddata->gbm_dev = (void *)0x1; /* Fake pointer to bypass checks */
+        return 0;
+	}
 
     viddata->gbm_init = true;
 
@@ -1249,6 +1257,23 @@ bool KMSDRM_CreateSurfaces(SDL_VideoDevice *_this, SDL_Window *window)
     SDL_WindowData *windata = window->internal;
     SDL_VideoDisplay *display = SDL_GetVideoDisplayForWindow(window);
     SDL_DisplayData *dispdata = display->internal;
+	
+	SDL_Log("KMSDRM: Entered KMSDRM_CreateSurfaces()");
+    SDL_Log("KMSDRM: GBM device = %p", viddata->gbm_dev);
+    SDL_Log("KMSDRM: Mode: %dx%d", dispdata->mode.hdisplay, dispdata->mode.vdisplay);
+
+    if ((uintptr_t)viddata->gbm_dev == 0x1) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: GBM device is mocked; skipping GBM surface creation.");
+        return 0;
+    }
+
+    if (!viddata->gbm_dev) {
+        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: GBM device is NULL — surface creation impossible.");
+        return SDL_SetError("KMSDRM: Missing GBM device");
+    }
+
+    /* Optional: log here before gbm_surface_create call */
+    SDL_Log("KMSDRM: Proceeding to create gbm_surface...");
 
     uint32_t surface_fmt = GBM_FORMAT_ARGB8888;
     uint32_t surface_flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING;
@@ -1304,6 +1329,10 @@ bool KMSDRM_CreateSurfaces(SDL_VideoDevice *_this, SDL_Window *window)
        go back to delayed SDL_EGL_MakeCurrent() call in SwapWindow. */
     egl_context = (EGLContext)SDL_GL_GetCurrentContext();
     result = SDL_EGL_MakeCurrent(_this, windata->egl_surface, egl_context);
+
+    // Initialize BGFX to render into this GBM surface/context (once).
+//InitBGFXWithGBM(viddata->gbm_dev, windata->gs,
+//                dispdata->mode.hdisplay, dispdata->mode.vdisplay);
 
     SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED,
                         dispdata->mode.hdisplay, dispdata->mode.vdisplay);
@@ -1406,6 +1435,71 @@ void KMSDRM_VideoQuit(SDL_VideoDevice *_this)
     viddata->max_windows = 0;
     viddata->num_windows = 0;
     viddata->video_init = false;
+}
+
+int SDL_KMSDRM_GetGBMHandles(SDL_Window *window, struct gbm_device **out_dev, struct gbm_surface **out_surf)
+{
+    if (!window || !out_dev || !out_surf) {
+        return -1;
+    }
+
+    SDL_WindowData *windata = window->internal;
+    if (!windata) {
+        return -1;
+    }
+
+    SDL_VideoData *viddata = windata->viddata;
+    if (!viddata) {
+        return -1;
+    }
+
+    // Handle the "mocked" gbm device case from the patched variant.
+    if ((uintptr_t)viddata->gbm_dev == 0x1) {
+        *out_dev = NULL;
+        *out_surf = NULL;
+        return 0;
+    }
+
+    if (!viddata->gbm_dev || !windata->gs) {
+        return -1;
+    }
+
+    *out_dev = viddata->gbm_dev;
+    *out_surf = windata->gs;
+    return 0;
+}
+
+void SDL_KMSDRM_GetBGFXPlatformData(SDL_Window *window, bgfx_platform_data_t *pd)
+{
+    if (!window || !pd) {
+        return;
+    }
+
+    struct gbm_device *gbm_dev = NULL;
+    struct gbm_surface *gbm_surf = NULL;
+
+    if (SDL_KMSDRM_GetGBMHandles(window, &gbm_dev, &gbm_surf) != 0 || !gbm_dev || !gbm_surf) {
+        // cannot populate platform data; leave zeroed
+        return;
+    }
+
+    SDL_WindowData *windata = window->internal;
+    if (!windata) {
+        return;
+    }
+    SDL_VideoData *viddata = windata->viddata;
+    if (!viddata) {
+        return;
+    }
+
+    bgfx_platform_data_t tmp;
+    memset(&tmp, 0, sizeof(tmp));
+
+    // For KMSDRM, use the DRM fd as the "native display type" and the GBM surface as the window handle.
+    tmp.ndt = (void *)(uintptr_t)viddata->drm_fd;
+    tmp.nwh = (void *)(uintptr_t)gbm_surf;
+
+    *pd = tmp;
 }
 
 // Read modes from the connector modes, and store them in display->display_modes.
