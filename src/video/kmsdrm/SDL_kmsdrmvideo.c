@@ -45,7 +45,6 @@
 #include "SDL_kmsdrmevents.h"
 #include "SDL_kmsdrmmouse.h"
 #include "SDL_kmsdrmvideo.h"
-#include <bgfx/c99/bgfx.h> // for bgfx_platform_data_t
 #include "SDL_kmsdrmopengles.h"
 #include "SDL_kmsdrmvulkan.h"
 #include <dirent.h>
@@ -54,7 +53,42 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+extern "C" {
+  #include <gbm.h>
+  #include <SDL3/SDL_kmsdrm_helpers.h>   // your new public header
+}
 
+if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "kmsdrm") == 0) {
+    gbm_device*  gbmDev  = nullptr;
+    gbm_surface* gbmSurf = nullptr;
+
+    if (SDL_KMSDRM_GetGBMHandles(sdlWnd, &gbmDev, &gbmSurf) == 0 && gbmDev && gbmSurf) {
+        bgfx::PlatformData pd{};
+        pd.ndt = gbmDev;     // GBM device*
+        pd.nwh = gbmSurf;    // GBM surface*
+        pd.context = nullptr;
+        pd.backBuffer = nullptr;
+        pd.backBufferDS = nullptr;
+
+        bgfx::Init init{};
+        init.type = bgfx::RendererType::OpenGLES;  // Mali/libmali
+        init.platformData = pd;
+
+        if (!bgfx::init(init)) {
+            PLOGE << "BGFX init failed on KMSDRM/GBM";
+            return;
+        }
+
+        // Do NOT create a framebuffer from nwh on GBM/EGL.
+        fbh = BGFX_INVALID_HANDLE;
+    }
+}
+SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,
+                                                  struct gbm_device **out_dev,
+                                                  struct gbm_surface **out_surf)
+{
+    /* ... fill out_dev/out_surf from windata->viddata->gbm_dev and windata->gs ... */
+}
 #ifdef SDL_PLATFORM_OPENBSD
 static bool moderndri = false;
 #else
