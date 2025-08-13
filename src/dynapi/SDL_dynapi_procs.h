@@ -1288,12 +1288,8 @@ SDL_DYNAPI_PROC(bool,SDL_SetAudioIterationCallbacks,(SDL_AudioDeviceID a,SDL_Aud
 SDL_DYNAPI_PROC(int,SDL_GetEventDescription,(const SDL_Event *a,char *b,int c),(a,b,c),return)
 SDL_DYNAPI_PROC(bool,SDL_PutAudioStreamDataNoCopy,(SDL_AudioStream *a,const void *b,int c,SDL_AudioStreamDataCompleteCallback d,void *e),(a,b,c,d,e),return)
 #if defined(SDL_VIDEO_DRIVER_KMSDRM)
-/* Forward decls so we don't need <gbm.h> in DynAPI headers */
+/* Forward decls so DynAPI doesn’t need <gbm.h> */
 struct gbm_device;
 struct gbm_surface;
-
-SDL_DYNAPI_PROC(int, SDL_KMSDRM_GetGBMHandles,
-    (SDL_Window *a, struct gbm_device **b, struct gbm_surface **c),
-    (a, b, c), return)
-#endif
 SDL_DYNAPI_PROC(int, SDL_KMSDRM_GetGBMHandles,(SDL_Window *a, struct gbm_device **b, struct gbm_surface **c),(a, b, c), return)
+#endif

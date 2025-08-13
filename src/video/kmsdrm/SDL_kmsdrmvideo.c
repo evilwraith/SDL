@@ -53,42 +53,47 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
-extern "C" {
-  #include <gbm.h>
-  #include <SDL3/SDL_kmsdrm_helpers.h>   // your new public header
-}
 
-if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "kmsdrm") == 0) {
-    gbm_device*  gbmDev  = nullptr;
-    gbm_surface* gbmSurf = nullptr;
+/* No C++/BGFX code in this TU; this is the SDL KMSDRM driver implementation. */
 
-    if (SDL_KMSDRM_GetGBMHandles(sdlWnd, &gbmDev, &gbmSurf) == 0 && gbmDev && gbmSurf) {
-        bgfx::PlatformData pd{};
-        pd.ndt = gbmDev;     // GBM device*
-        pd.nwh = gbmSurf;    // GBM surface*
-        pd.context = nullptr;
-        pd.backBuffer = nullptr;
-        pd.backBufferDS = nullptr;
-
-        bgfx::Init init{};
-        init.type = bgfx::RendererType::OpenGLES;  // Mali/libmali
-        init.platformData = pd;
-
-        if (!bgfx::init(init)) {
-            PLOGE << "BGFX init failed on KMSDRM/GBM";
-            return;
-        }
-
-        // Do NOT create a framebuffer from nwh on GBM/EGL.
-        fbh = BGFX_INVALID_HANDLE;
-    }
-}
+/* Public helper exported by SDL (implementation here; declaration in public header). */
 SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,
-                                                  struct gbm_device **out_dev,
-                                                  struct gbm_surface **out_surf)
+                         struct gbm_device **out_dev,
+                         struct gbm_surface **out_surf)
 {
-    /* ... fill out_dev/out_surf from windata->viddata->gbm_dev and windata->gs ... */
+    if (!window || !out_dev || !out_surf) {
+        return -1;
+    }
+
+    SDL_WindowData *windata = window->internal;
+    if (!windata) {
+        *out_dev = NULL; *out_surf = NULL;
+        return -1;
+    }
+
+    SDL_VideoData *viddata = windata->viddata;
+    if (!viddata) {
+        *out_dev = NULL; *out_surf = NULL;
+        return -1;
+    }
+
+    /* Treat any “mock GBM” sentinel as failure. */
+    if ((void*)viddata->gbm_dev == (void*)0x1 || (void*)windata->gs == (void*)0x1) {
+        *out_dev = NULL; *out_surf = NULL;
+        SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: mock GBM sentinel detected.");
+        return -1;
+    }
+
+    if (!viddata->gbm_dev || !windata->gs) {
+        *out_dev = NULL; *out_surf = NULL;
+        return -1;
+    }
+
+    *out_dev  = (struct gbm_device *)viddata->gbm_dev;
+    *out_surf = (struct gbm_surface *)windata->gs;
+    return 0;
 }
+
 #ifdef SDL_PLATFORM_OPENBSD
 static bool moderndri = false;
 #else

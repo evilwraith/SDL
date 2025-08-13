@@ -32,7 +32,6 @@
 #include <xf86drmMode.h>
 #include <gbm.h>
 #include <EGL/egl.h>
-#include <bgfx/c99/bgfx.h> // for bgfx_platform_data_t
 
 #ifndef DRM_FORMAT_MOD_INVALID
 #define DRM_FORMAT_MOD_INVALID 0x00ffffffffffffffULL
@@ -174,14 +173,6 @@ extern void KMSDRM_MinimizeWindow(SDL_VideoDevice *_this, SDL_Window *window);
 extern void KMSDRM_RestoreWindow(SDL_VideoDevice *_this, SDL_Window *window);
 extern void KMSDRM_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window);
 
-/* Helpers for external integrations (GBM / BGFX) */
-// Retrieves the underlying gbm_device and gbm_surface for an SDL window backed by KMSDRM.
-// Returns 0 on success, negative on failure. If the GBM device is being mocked (as in the patched fallback)
-// out_dev or out_surf may be NULL.
-extern int SDL_KMSDRM_GetGBMHandles(SDL_Window *window, struct gbm_device **out_dev, struct gbm_surface **out_surf);
-
-// Populates a bgfx_platform_data_t suitable for initializing bgfx from an SDL KMSDRM window.
-// If it cannot be filled, *pd is left zeroed.
-extern void SDL_KMSDRM_GetBGFXPlatformData(SDL_Window *window, bgfx_platform_data_t *pd);
+/* (no public helper declarations here; see include/SDL3/SDL_kmsdrm_helpers.h) */
 
 #endif // SDL_kmsdrmvideo_h
