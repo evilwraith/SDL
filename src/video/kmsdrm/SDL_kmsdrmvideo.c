@@ -57,9 +57,7 @@
 /* No C++/BGFX code in this TU; this is the SDL KMSDRM driver implementation. */
 
 /* Public helper exported by SDL (implementation here; declaration in public header). */
-SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,
-                         struct gbm_device **out_dev,
-                         struct gbm_surface **out_surf)
+SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,void **out_dev,void **out_surf)
 {
     if (!window || !out_dev || !out_surf) {
         return -1;
@@ -89,8 +87,8 @@ SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,
         return -1;
     }
 
-    *out_dev  = (struct gbm_device *)viddata->gbm_dev;
-    *out_surf = (struct gbm_surface *)windata->gs;
+    *out_dev  = (void *)viddata->gbm_dev;
+    *out_surf = (void *)windata->gs;
     return 0;
 }
 
