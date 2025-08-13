@@ -57,6 +57,7 @@
 #include <SDL3/SDL_joystick.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_kmsdrm_helpers.h>
 #include <SDL3/SDL_loadso.h>
 #include <SDL3/SDL_locale.h>
 #include <SDL3/SDL_log.h>
