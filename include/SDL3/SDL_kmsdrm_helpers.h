@@ -7,7 +7,7 @@ struct gbm_surface;
 extern "C" {
 #endif
 
-SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,void **out_dev,void **out_surf);
+SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window, void **out_dev, void **out_surf);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -1287,4 +1287,8 @@ SDL_DYNAPI_PROC(bool,SDL_PutAudioStreamPlanarData,(SDL_AudioStream *a,const void
 SDL_DYNAPI_PROC(bool,SDL_SetAudioIterationCallbacks,(SDL_AudioDeviceID a,SDL_AudioIterationCallback b,SDL_AudioIterationCallback c,void *d),(a,b,c,d),return)
 SDL_DYNAPI_PROC(int,SDL_GetEventDescription,(const SDL_Event *a,char *b,int c),(a,b,c),return)
 SDL_DYNAPI_PROC(bool,SDL_PutAudioStreamDataNoCopy,(SDL_AudioStream *a,const void *b,int c,SDL_AudioStreamDataCompleteCallback d,void *e),(a,b,c,d,e),return)
-SDL_DYNAPI_PROC(int, SDL_KMSDRM_GetGBMHandles,(SDL_Window *a, void **b, void **c),(a, b, c), return)
+#if defined(SDL_VIDEO_DRIVER_KMSDRM)
+SDL_DYNAPI_PROC(int, SDL_KMSDRM_GetGBMHandles,
+    (SDL_Window *a, void **b, void **c),
+    (a, b, c), return)
+#endif

@@ -54,28 +54,26 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 
-/* No C++/BGFX code in this TU; this is the SDL KMSDRM driver implementation. */
-
-/* Public helper exported by SDL (implementation here; declaration in public header). */
-SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,void **out_dev,void **out_surf)
+/* One and only implementation of the GBM handles helper.
+   - With DynAPI ON, the public trampoline calls ..._REAL().
+   - With DynAPI OFF, the public symbol is defined directly here. */
+#if SDL_DYNAMIC_API
+int SDLCALL SDL_KMSDRM_GetGBMHandles_REAL(SDL_Window *window, void **out_dev, void **out_surf)
+#else
+SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window, void **out_dev, void **out_surf)
+#endif
 {
     if (!window || !out_dev || !out_surf) {
         return -1;
     }
 
     SDL_WindowData *windata = window->internal;
-    if (!windata) {
-        *out_dev = NULL; *out_surf = NULL;
-        return -1;
-    }
+    if (!windata) { *out_dev = NULL; *out_surf = NULL; return -1; }
 
     SDL_VideoData *viddata = windata->viddata;
-    if (!viddata) {
-        *out_dev = NULL; *out_surf = NULL;
-        return -1;
-    }
+    if (!viddata) { *out_dev = NULL; *out_surf = NULL; return -1; }
 
-    /* Treat any “mock GBM” sentinel as failure. */
+    /* Treat “mock GBM” sentinel as failure. */
     if ((void*)viddata->gbm_dev == (void*)0x1 || (void*)windata->gs == (void*)0x1) {
         *out_dev = NULL; *out_surf = NULL;
         SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: mock GBM sentinel detected.");
@@ -87,8 +85,8 @@ SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window,void **out_
         return -1;
     }
 
-    *out_dev  = (void *)viddata->gbm_dev;
-    *out_surf = (void *)windata->gs;
+    *out_dev  = (void*)viddata->gbm_dev;  /* gbm_device* */
+    *out_surf = (void*)windata->gs;       /* gbm_surface* */
     return 0;
 }
 
