@@ -39,9 +39,9 @@
  * may also be stretched with linear interpolation.
  *
  * This API is designed to accelerate simple 2D operations. You may want more
- * functionality such as polygons and particle effects and in that case you
- * should use SDL's OpenGL/Direct3D support, the SDL3 GPU API, or one of the
- * many good 3D engines.
+ * functionality such as 3D polygons and particle effects, and in that case
+ * you should use SDL's OpenGL/Direct3D support, the SDL3 GPU API, or one of
+ * the many good 3D engines.
  *
  * These functions must be called from the main thread. See this bug for
  * details: https://github.com/libsdl-org/SDL/issues/986
@@ -283,7 +283,7 @@ extern SDL_DECLSPEC SDL_Renderer * SDLCALL SDL_CreateRenderer(SDL_Window *window
  *   present synchronized with the refresh rate. This property can take any
  *   value that is supported by SDL_SetRenderVSync() for the renderer.
  *
- * With the SDL GPU renderer:
+ * With the SDL GPU renderer (since SDL 3.4.0):
  *
  * - `SDL_PROP_RENDERER_CREATE_GPU_SHADERS_SPIRV_BOOLEAN`: the app is able to
  *   provide SPIR-V shaders to SDL_GPURenderState, optional.
@@ -2747,7 +2747,7 @@ extern SDL_DECLSPEC bool SDLCALL SDL_RenderDebugText(SDL_Renderer *renderer, flo
  * Draw debug text to an SDL_Renderer.
  *
  * This function will render a printf()-style format string to a renderer.
- * Note that this is a convinence function for debugging, with severe
+ * Note that this is a convenience function for debugging, with severe
  * limitations, and is not intended to be used for production apps and games.
  *
  * For the full list of limitations and other useful information, see

@@ -235,7 +235,8 @@
  * SDL driver name: "direct3d12"
  *
  * Supported on Windows 10 or newer, Xbox One (GDK), and Xbox Series X|S
- * (GDK). Requires a GPU that supports DirectX 12 Feature Level 11_1.
+ * (GDK). Requires a GPU that supports DirectX 12 Feature Level 11_0 and
+ * Resource Binding Tier 2 or above.
  *
  * ### Metal
  *
@@ -1158,7 +1159,7 @@ typedef enum SDL_GPUCompareOp
     SDL_GPU_COMPAREOP_LESS_OR_EQUAL,     /**< The comparison evaluates reference <= test. */
     SDL_GPU_COMPAREOP_GREATER,           /**< The comparison evaluates reference > test. */
     SDL_GPU_COMPAREOP_NOT_EQUAL,         /**< The comparison evaluates reference != test. */
-    SDL_GPU_COMPAREOP_GREATER_OR_EQUAL,  /**< The comparison evalutes reference >= test. */
+    SDL_GPU_COMPAREOP_GREATER_OR_EQUAL,  /**< The comparison evaluates reference >= test. */
     SDL_GPU_COMPAREOP_ALWAYS             /**< The comparison always evaluates true. */
 } SDL_GPUCompareOp;
 
@@ -1627,7 +1628,7 @@ typedef struct SDL_GPUSamplerCreateInfo
 typedef struct SDL_GPUVertexBufferDescription
 {
     Uint32 slot;                        /**< The binding slot of the vertex buffer. */
-    Uint32 pitch;                       /**< The byte pitch between consecutive elements of the vertex buffer. */
+    Uint32 pitch;                       /**< The size of a single element + the offset between elements. */
     SDL_GPUVertexInputRate input_rate;  /**< Whether attribute addressing is a function of the vertex index or instance index. */
     Uint32 instance_step_rate;          /**< Reserved for future use. Must be set to 0. */
 } SDL_GPUVertexBufferDescription;
@@ -2667,7 +2668,8 @@ extern SDL_DECLSPEC SDL_GPUShader * SDLCALL SDL_CreateGPUShader(
  * Creates a texture object to be used in graphics or compute workflows.
  *
  * The contents of this texture are undefined until data is written to the
- * texture.
+ * texture, either via SDL_UploadToGPUTexture or by performing a render or
+ * compute pass with this texture as a target.
  *
  * Note that certain combinations of usage flags are invalid. For example, a
  * texture cannot have both the SAMPLER and GRAPHICS_STORAGE_READ flags.
@@ -2709,6 +2711,8 @@ extern SDL_DECLSPEC SDL_GPUShader * SDLCALL SDL_CreateGPUShader(
  *
  * \sa SDL_UploadToGPUTexture
  * \sa SDL_DownloadFromGPUTexture
+ * \sa SDL_BeginGPURenderPass
+ * \sa SDL_BeginGPUComputePass
  * \sa SDL_BindGPUVertexSamplers
  * \sa SDL_BindGPUVertexStorageTextures
  * \sa SDL_BindGPUFragmentSamplers
@@ -2875,7 +2879,7 @@ extern SDL_DECLSPEC void SDLCALL SDL_InsertGPUDebugLabel(
     const char *text);
 
 /**
- * Begins a debug group with an arbitary name.
+ * Begins a debug group with an arbitrary name.
  *
  * Used for denoting groups of calls when viewing the command buffer
  * callstream in a graphics debugging tool.
@@ -3121,6 +3125,14 @@ extern SDL_DECLSPEC void SDLCALL SDL_PushGPUComputeUniformData(
  * pass. A default viewport and scissor state are automatically set when this
  * is called. You cannot begin another render pass, or begin a compute pass or
  * copy pass until you have ended the render pass.
+ *
+ * Using SDL_GPU_LOADOP_LOAD before any contents have been written to the
+ * texture subresource will result in undefined behavior. SDL_GPU_LOADOP_CLEAR
+ * will set the contents of the texture subresource to a single value before
+ * any rendering is performed. It's fine to do an empty render pass using
+ * SDL_GPU_STOREOP_STORE to clear a texture, but in general it's better to
+ * think of clearing not as an independent operation but as something that's
+ * done as the beginning of a render pass.
  *
  * \param command_buffer a command buffer.
  * \param color_target_infos an array of texture subresources with
@@ -3744,6 +3756,8 @@ extern SDL_DECLSPEC void SDLCALL SDL_UnmapGPUTransferBuffer(
  * \returns a copy pass handle.
  *
  * \since This function is available since SDL 3.2.0.
+ *
+ * \sa SDL_EndGPUCopyPass
  */
 extern SDL_DECLSPEC SDL_GPUCopyPass * SDLCALL SDL_BeginGPUCopyPass(
     SDL_GPUCommandBuffer *command_buffer);

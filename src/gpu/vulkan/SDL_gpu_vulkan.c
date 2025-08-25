@@ -1079,6 +1079,7 @@ typedef struct VulkanCommandBuffer
     VulkanFenceHandle *inFlightFence;
     bool autoReleaseFence;
 
+    bool swapchainRequested;
     bool isDefrag; // Whether this CB was created for defragging
 } VulkanCommandBuffer;
 
@@ -1250,13 +1251,20 @@ static inline const char *VkErrorMessages(VkResult code)
 #undef ERR_TO_STR
 }
 
-#define SET_ERROR_AND_RETURN(fmt, msg, ret)               \
+#define SET_ERROR(fmt, msg)                               \
     do {                                                  \
         if (renderer->debugMode) {                        \
             SDL_LogError(SDL_LOG_CATEGORY_GPU, fmt, msg); \
         }                                                 \
         SDL_SetError((fmt), (msg));                       \
-        return ret;                                       \
+    } while (0)
+
+#define SET_STRING_ERROR(msg) SET_ERROR("%s", msg)
+
+#define SET_ERROR_AND_RETURN(fmt, msg, ret) \
+    do {                                    \
+        SET_ERROR(fmt, msg);                \
+        return ret;                         \
     } while (0)
 
 #define SET_STRING_ERROR_AND_RETURN(msg, ret) SET_ERROR_AND_RETURN("%s", msg, ret)
@@ -6057,7 +6065,6 @@ static VkRenderPass VULKAN_INTERNAL_CreateRenderPass(
         colorAttachmentReferences[colorAttachmentReferenceCount].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         attachmentDescriptionCount += 1;
-        colorAttachmentReferenceCount += 1;
 
         if (colorTargetInfos[i].store_op == SDL_GPU_STOREOP_RESOLVE || colorTargetInfos[i].store_op == SDL_GPU_STOREOP_RESOLVE_AND_STORE) {
             VulkanTextureContainer *resolveContainer = (VulkanTextureContainer *)colorTargetInfos[i].resolve_texture;
@@ -6072,12 +6079,16 @@ static VkRenderPass VULKAN_INTERNAL_CreateRenderPass(
             attachmentDescriptions[attachmentDescriptionCount].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             attachmentDescriptions[attachmentDescriptionCount].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-            resolveReferences[resolveReferenceCount].attachment = attachmentDescriptionCount;
-            resolveReferences[resolveReferenceCount].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            resolveReferences[colorAttachmentReferenceCount].attachment = attachmentDescriptionCount;
+            resolveReferences[colorAttachmentReferenceCount].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
             attachmentDescriptionCount += 1;
             resolveReferenceCount += 1;
+        } else {
+            resolveReferences[colorAttachmentReferenceCount].attachment = VK_ATTACHMENT_UNUSED;
         }
+
+        colorAttachmentReferenceCount += 1;
     }
 
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -6953,6 +6964,8 @@ static void VULKAN_ReleaseTexture(
     for (i = 0; i < vulkanTextureContainer->textureCount; i += 1) {
         VULKAN_INTERNAL_ReleaseTexture(renderer, vulkanTextureContainer->textures[i]);
     }
+
+    SDL_DestroyProperties(vulkanTextureContainer->header.info.props);
 
     // Containers are just client handles, so we can destroy immediately
     if (vulkanTextureContainer->debugName != NULL) {
@@ -8592,7 +8605,7 @@ static void VULKAN_INTERNAL_BindComputeDescriptorSets(
         dynamicOffsetCount,
         dynamicOffsets);
 
-    commandBuffer->needNewVertexUniformOffsets = false;
+    commandBuffer->needNewComputeUniformOffsets = false;
 }
 
 static void VULKAN_DispatchCompute(
@@ -9577,6 +9590,7 @@ static SDL_GPUCommandBuffer *VULKAN_AcquireCommandBuffer(
 
     commandBuffer->autoReleaseFence = true;
 
+    commandBuffer->swapchainRequested = false;
     commandBuffer->isDefrag = 0;
 
     /* Reset the command buffer here to avoid resets being called
@@ -9925,6 +9939,14 @@ static bool VULKAN_INTERNAL_AcquireSwapchainTexture(
         SET_STRING_ERROR_AND_RETURN("Cannot acquire a swapchain texture from an unclaimed window!", false);
     }
 
+    // The command buffer is flagged for cleanup when the swapchain is requested as a cleanup timing mechanism
+    vulkanCommandBuffer->swapchainRequested = true;
+
+    if (window->flags & SDL_WINDOW_HIDDEN) {
+        // Edge case, texture is filled in with NULL but not an error
+        return true;
+    }
+
     // If window data marked as needing swapchain recreate, try to recreate
     if (windowData->needsSwapchainRecreate) {
         Uint32 recreateSwapchainResult = VULKAN_INTERNAL_RecreateSwapchain(renderer, windowData);
@@ -9940,13 +9962,6 @@ static bool VULKAN_INTERNAL_AcquireSwapchainTexture(
             }
             return true;
         }
-    }
-
-    if (swapchainTextureWidth) {
-        *swapchainTextureWidth = windowData->width;
-    }
-    if (swapchainTextureHeight) {
-        *swapchainTextureHeight = windowData->height;
     }
 
     if (windowData->inFlightFences[windowData->frameCounter] != NULL) {
@@ -9998,6 +10013,14 @@ static bool VULKAN_INTERNAL_AcquireSwapchainTexture(
             // Edge case, texture is filled in with NULL but not an error
             return true;
         }
+    }
+
+    if (swapchainTextureWidth) {
+        *swapchainTextureWidth = windowData->width;
+    }
+
+    if (swapchainTextureHeight) {
+        *swapchainTextureHeight = windowData->height;
     }
 
     swapchainTextureContainer = &windowData->textureContainers[swapchainImageIndex];
@@ -10377,6 +10400,7 @@ static void VULKAN_INTERNAL_CleanCommandBuffer(
     commandBuffer->presentDataCount = 0;
     commandBuffer->waitSemaphoreCount = 0;
     commandBuffer->signalSemaphoreCount = 0;
+    commandBuffer->swapchainRequested = false;
 
     // Reset defrag state
 
@@ -10474,11 +10498,18 @@ static bool VULKAN_Wait(
     VkResult result;
     Sint32 i;
 
+    SDL_LockMutex(renderer->submitLock);
+
     result = renderer->vkDeviceWaitIdle(renderer->logicalDevice);
 
-    CHECK_VULKAN_ERROR_AND_RETURN(result, vkDeviceWaitIdle, false);
-
-    SDL_LockMutex(renderer->submitLock);
+    if (result != VK_SUCCESS) {
+        if (renderer->debugMode) {
+            SDL_LogError(SDL_LOG_CATEGORY_GPU, "%s %s", "vkDeviceWaitIdle", VkErrorMessages(result));
+        }
+        SDL_SetError("%s %s", "vkDeviceWaitIdle", VkErrorMessages(result));
+        SDL_UnlockMutex(renderer->submitLock);
+        return false;
+    }
 
     for (i = renderer->submittedCommandBufferCount - 1; i >= 0; i -= 1) {
         commandBuffer = renderer->submittedCommandBuffers[i];
@@ -10533,7 +10564,7 @@ static bool VULKAN_Submit(
     VulkanTextureSubresource *swapchainTextureSubresource;
     VulkanMemorySubAllocator *allocator;
     bool performCleanups =
-        (renderer->claimedWindowCount > 0 && vulkanCommandBuffer->presentDataCount > 0) ||
+        (renderer->claimedWindowCount > 0 && vulkanCommandBuffer->swapchainRequested) ||
         renderer->claimedWindowCount == 0;
 
     SDL_LockMutex(renderer->submitLock);
@@ -11224,13 +11255,14 @@ static Uint8 VULKAN_INTERNAL_IsDeviceSuitable(
     VkPhysicalDevice physicalDevice,
     VulkanExtensions *physicalDeviceExtensions,
     Uint32 *queueFamilyIndex,
-    Uint8 *deviceRank)
+    Uint64 *deviceRank)
 {
     Uint32 queueFamilyCount, queueFamilyRank, queueFamilyBest;
     VkQueueFamilyProperties *queueProps;
     bool supportsPresent;
     VkPhysicalDeviceProperties deviceProperties;
     VkPhysicalDeviceFeatures deviceFeatures;
+    VkPhysicalDeviceMemoryProperties deviceMemory;
     Uint32 i;
 
     const Uint8 *devicePriority = renderer->preferLowPower ? DEVICE_PRIORITY_LOWPOWER : DEVICE_PRIORITY_HIGHPERFORMANCE;
@@ -11352,6 +11384,30 @@ static Uint8 VULKAN_INTERNAL_IsDeviceSuitable(
         return 0;
     }
 
+    /* If we prefer high performance, sum up all device local memory (rounded to megabytes)
+     * to deviceRank. In the niche case of someone having multiple dedicated GPUs in the same
+     * system, this theoretically picks the most powerful one (or at least the one with the
+     * most memory!)
+     *
+     * We do this *after* discarding all non suitable devices, which means if this computer
+     * has multiple dedicated GPUs that all meet our criteria, *and* the user asked for high
+     * performance, then we always pick the GPU with more VRAM.
+     */
+    if (!renderer->preferLowPower) {
+        renderer->vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemory);
+        Uint64 videoMemory = 0;
+        for (i = 0; i < deviceMemory.memoryHeapCount; i++) {
+            VkMemoryHeap heap = deviceMemory.memoryHeaps[i];
+            if (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+                videoMemory += heap.size;
+            }
+        }
+        // Round it to megabytes (as per the vulkan spec videoMemory is in bytes)
+        Uint64 videoMemoryRounded = videoMemory / 1024 / 1024;
+        *deviceRank += videoMemoryRounded;
+    }
+
+
     // FIXME: Need better structure for checking vs storing swapchain support details
     return 1;
 }
@@ -11364,7 +11420,7 @@ static Uint8 VULKAN_INTERNAL_DeterminePhysicalDevice(VulkanRenderer *renderer)
     Uint32 i, physicalDeviceCount;
     Sint32 suitableIndex;
     Uint32 queueFamilyIndex, suitableQueueFamilyIndex;
-    Uint8 deviceRank, highestRank;
+    Uint64 deviceRank, highestRank;
 
     vulkanResult = renderer->vkEnumeratePhysicalDevices(
         renderer->instance,
@@ -11719,9 +11775,10 @@ static SDL_GPUDevice *VULKAN_CreateDevice(bool debugMode, bool preferLowPower, S
     renderer->desiredDeviceFeatures.imageCubeArray = VK_TRUE;
 
     if (!VULKAN_INTERNAL_PrepareVulkan(renderer)) {
+        SET_STRING_ERROR("Failed to initialize Vulkan!");
         SDL_free(renderer);
         SDL_Vulkan_UnloadLibrary();
-        SET_STRING_ERROR_AND_RETURN("Failed to initialize Vulkan!", NULL);
+        return NULL;
     }
 
     renderer->props = SDL_CreateProperties();
@@ -11826,9 +11883,10 @@ static SDL_GPUDevice *VULKAN_CreateDevice(bool debugMode, bool preferLowPower, S
 
     if (!VULKAN_INTERNAL_CreateLogicalDevice(
             renderer)) {
+        SET_STRING_ERROR("Failed to create logical device!");
         SDL_free(renderer);
         SDL_Vulkan_UnloadLibrary();
-        SET_STRING_ERROR_AND_RETURN("Failed to create logical device!", NULL);
+        return NULL;
     }
 
     // FIXME: just move this into this function

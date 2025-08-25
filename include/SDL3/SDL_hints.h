@@ -595,7 +595,7 @@ extern "C" {
  * A variable that limits what CPU features are available.
  *
  * By default, SDL marks all features the current CPU supports as available.
- * This hint allows to limit these to a subset.
+ * This hint allows the enabled features to be limited to a subset.
  *
  * When the hint is unset, or empty, SDL will enable all detected CPU
  * features.
@@ -1745,6 +1745,20 @@ extern "C" {
  * The default is the value of SDL_HINT_JOYSTICK_HIDAPI
  */
 #define SDL_HINT_JOYSTICK_HIDAPI_8BITDO "SDL_JOYSTICK_HIDAPI_8BITDO"
+
+/**
+ * A variable controlling whether the HIDAPI driver for SInput controllers
+ * should be used.
+ *
+ * More info - https://github.com/HandHeldLegend/SInput-HID
+ *
+ * This variable can be set to the following values:
+ *
+ * "0" - HIDAPI driver is not used. "1" - HIDAPI driver is used.
+ *
+ * The default is the value of SDL_HINT_JOYSTICK_HIDAPI
+ */
+#define SDL_HINT_JOYSTICK_HIDAPI_SINPUT "SDL_JOYSTICK_HIDAPI_SINPUT"
 
 /**
  * A variable controlling whether the HIDAPI driver for Flydigi controllers
@@ -4381,6 +4395,30 @@ extern "C" {
  */
 #define SDL_HINT_PEN_TOUCH_EVENTS "SDL_PEN_TOUCH_EVENTS"
 
+/**
+ * A variable controlling whether SDL logs some debug information.
+ *
+ * The variable can be set to the following values:
+ *
+ * - "0": SDL debug information will not be logged. (default)
+ * - "1": SDL debug information will be logged.
+ *
+ * This is generally meant to be used as an environment variable to let
+ * end-users report what subsystems were chosen on their system, perhaps what
+ * sort of hardware they are running on, etc, to aid in debugging. Logged
+ * information is sent through SDL_Log(), which means by default they appear
+ * on stdout on most platforms, or maybe OutputDebugString() on Windows, and
+ * can be funneled by the app with SDL_SetLogOutputFunction(), etc.
+ *
+ * The specific output might change between SDL versions; more information
+ * might be deemed useful in the future.
+ *
+ * This hint can be set anytime, but the specific logs are generated during
+ * subsystem init.
+ *
+ * \since This hint is available since SDL 3.4.0.
+ */
+#define SDL_HINT_DEBUG_LOGGING "SDL_DEBUG_LOGGING"
 
 /**
  * An enumeration of hint priorities.
