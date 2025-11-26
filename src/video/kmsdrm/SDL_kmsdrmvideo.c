@@ -1702,6 +1702,10 @@ void KMSDRM_HideWindow(_THIS, SDL_Window *window)
 }
 void KMSDRM_RaiseWindow(_THIS, SDL_Window *window)
 {
+    /* Since there is no Window Manager, assume the caller cares about input
+    SDL_SetMouseFocus() also takes care of calling KMSDRM_ShowCursor() if necessary. */
+    SDL_SetMouseFocus(window);
+    SDL_SetKeyboardFocus(window);
 }
 void KMSDRM_MaximizeWindow(_THIS, SDL_Window *window)
 {
