@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -24,11 +24,19 @@
 
 #ifdef SDL_USE_LIBDBUS
 // we never link directly to libdbus.
-static const char *dbus_library = "libdbus-1.so.3";
+#define SDL_DRIVER_DBUS_DYNAMIC "libdbus-1.so.3"
+static const char *dbus_library = SDL_DRIVER_DBUS_DYNAMIC;
 static SDL_SharedObject *dbus_handle = NULL;
 static char *inhibit_handle = NULL;
 static unsigned int screensaver_cookie = 0;
 static SDL_DBusContext dbus;
+
+SDL_ELF_NOTE_DLOPEN(
+    "core-libdbus",
+    "Support for D-Bus IPC",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
+    SDL_DRIVER_DBUS_DYNAMIC
+)
 
 static bool LoadDBUSSyms(void)
 {

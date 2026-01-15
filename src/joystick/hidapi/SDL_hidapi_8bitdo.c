@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2024 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -270,6 +270,13 @@ static Uint64 HIDAPI_Driver8BitDo_GetIMURateForProductID(SDL_HIDAPI_Device *devi
             return 100;
         }
     case USB_PRODUCT_8BITDO_ULTIMATE2_WIRELESS:
+        if (device->is_bluetooth) {
+            // Note, This is estimated by observation of Bluetooth packets received in the testcontroller tool
+            return 120; // Observed Bluetooth packet rate seems to be 120hz
+        } else {
+            // This firmware appears to update at 1000 Hz over USB dongle
+            return 1000;
+        }
     default:
         return 120;
     }

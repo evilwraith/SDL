@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -52,6 +52,13 @@ struct SDL_PrivateAudioData
 #endif
 
 #define LIB_AAUDIO_SO "libaaudio.so"
+
+SDL_ELF_NOTE_DLOPEN(
+    "audio-aaudio",
+    "Support for audio through AAudio",
+    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
+    LIB_AAUDIO_SO
+)
 
 typedef struct AAUDIO_Data
 {
@@ -313,8 +320,8 @@ static bool BuildAAudioStream(SDL_AudioDevice *device)
     ctx.AAudioStreamBuilder_setFormat(builder, format);
     ctx.AAudioStreamBuilder_setSampleRate(builder, device->spec.freq);
     ctx.AAudioStreamBuilder_setChannelCount(builder, device->spec.channels);
-	
-    // If no specific buffer size has been requested, the device will pick the optimal 
+
+    // If no specific buffer size has been requested, the device will pick the optimal
 	if(SDL_GetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES)) {
 	    ctx.AAudioStreamBuilder_setBufferCapacityInFrames(builder, 2 * device->sample_frames); // AAudio requires that the buffer capacity is at least
 	    ctx.AAudioStreamBuilder_setFramesPerDataCallback(builder, device->sample_frames);      // twice the size of the data callback buffer size

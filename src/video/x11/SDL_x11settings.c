@@ -26,14 +26,10 @@
 #include "SDL_x11video.h"
 #include "SDL_x11settings.h"
 
-#define SDL_XSETTINGS_GDK_WINDOW_SCALING_FACTOR "Gdk/WindowScalingFactor"
-#define SDL_XSETTINGS_GDK_UNSCALED_DPI "Gdk/UnscaledDPI"
-#define SDL_XSETTINGS_XFT_DPI "Xft/DPI"
-
 static void UpdateContentScale(SDL_VideoDevice *_this)
 {
     if (_this) {
-        float scale_factor = X11_GetGlobalContentScale(_this);
+        float scale_factor = X11_GetGlobalContentScaleForDevice(_this);
         for (int i = 0; i < _this->num_displays; ++i) {
             SDL_SetDisplayContentScale(_this->displays[i], scale_factor);
         }
@@ -45,7 +41,7 @@ static void X11_XsettingsNotify(const char *name, XSettingsAction action, XSetti
     SDL_VideoDevice *_this = data;
 
     if (SDL_strcmp(name, SDL_XSETTINGS_GDK_WINDOW_SCALING_FACTOR) == 0 ||
-    	SDL_strcmp(name, SDL_XSETTINGS_GDK_UNSCALED_DPI) == 0 ||
+        SDL_strcmp(name, SDL_XSETTINGS_GDK_UNSCALED_DPI) == 0 ||
         SDL_strcmp(name, SDL_XSETTINGS_XFT_DPI) == 0) {
         UpdateContentScale(_this);
     }
@@ -81,15 +77,12 @@ void X11_HandleXsettingsEvent(SDL_VideoDevice *_this, const XEvent *xevent)
     }
 }
 
-int X11_GetXsettingsIntKey(SDL_VideoDevice *_this, const char *key, int fallback_value) {
-    SDL_VideoData *data = _this->internal;
-    SDLX11_SettingsData *xsettings_data = &data->xsettings_data;
+int X11_GetXsettingsClientIntKey(XSettingsClient *client, const char *key, int fallback_value) {
     XSettingsSetting *setting = NULL;
     int res = fallback_value;
 
-
-    if (xsettings_data->xsettings) {
-        if (xsettings_client_get_setting(xsettings_data->xsettings, key, &setting) != XSETTINGS_SUCCESS) {
+    if (client) {
+        if (xsettings_client_get_setting(client, key, &setting) != XSETTINGS_SUCCESS) {
             goto no_key;
         }
 
@@ -106,6 +99,10 @@ no_key:
     }
 
     return res;
+}
+
+int X11_GetXsettingsIntKey(SDL_VideoDevice *_this, const char *key, int fallback_value) {
+    return X11_GetXsettingsClientIntKey(_this->internal->xsettings_data.xsettings, key, fallback_value);
 }
 
 #endif // SDL_VIDEO_DRIVER_X11
