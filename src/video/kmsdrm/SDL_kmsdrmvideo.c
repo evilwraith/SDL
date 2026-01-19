@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -53,42 +53,6 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
-
-/* One and only implementation of the GBM handles helper.
-   - With DynAPI ON, the public trampoline calls ..._REAL().
-   - With DynAPI OFF, the public symbol is defined directly here. */
-#if SDL_DYNAMIC_API
-int SDLCALL SDL_KMSDRM_GetGBMHandles_REAL(SDL_Window *window, void **out_dev, void **out_surf)
-#else
-SDL_DECLSPEC int SDLCALL SDL_KMSDRM_GetGBMHandles(SDL_Window *window, void **out_dev, void **out_surf)
-#endif
-{
-    if (!window || !out_dev || !out_surf) {
-        return -1;
-    }
-
-    SDL_WindowData *windata = window->internal;
-    if (!windata) { *out_dev = NULL; *out_surf = NULL; return -1; }
-
-    SDL_VideoData *viddata = windata->viddata;
-    if (!viddata) { *out_dev = NULL; *out_surf = NULL; return -1; }
-
-    /* Treat “mock GBM” sentinel as failure. */
-    if ((void*)viddata->gbm_dev == (void*)0x1 || (void*)windata->gs == (void*)0x1) {
-        *out_dev = NULL; *out_surf = NULL;
-        SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: mock GBM sentinel detected.");
-        return -1;
-    }
-
-    if (!viddata->gbm_dev || !windata->gs) {
-        *out_dev = NULL; *out_surf = NULL;
-        return -1;
-    }
-
-    *out_dev  = (void*)viddata->gbm_dev;  /* gbm_device* */
-    *out_surf = (void*)windata->gs;       /* gbm_surface* */
-    return 0;
-}
 
 #ifdef SDL_PLATFORM_OPENBSD
 static bool moderndri = false;
@@ -1489,7 +1453,8 @@ static bool KMSDRM_InitDisplays(SDL_VideoDevice *_this)
     SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "Opened DRM FD (%d)", viddata->drm_fd);
 
     // Set ATOMIC & UNIVERSAL PLANES compatibility
-    viddata->is_atomic = set_client_atomic_caps(viddata->drm_fd);
+    // viddata->is_atomic = set_client_atomic_caps(viddata->drm_fd);
+    viddata->is_atomic = false; // FORCE LEGACY for ALP4K/RK3588
 
     SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "DRM FD (%d) %s atomic", viddata->drm_fd, viddata->is_atomic ? "SUPPORTS" : "DOES NOT SUPPORT");
 
@@ -1588,9 +1553,6 @@ static bool KMSDRM_GBMInit(SDL_VideoDevice *_this, SDL_DisplayData *dispdata)
 
     // Create the GBM device.
     viddata->gbm_dev = KMSDRM_gbm_create_device(viddata->drm_fd);
-	
-	SDL_Log("KMSDRM: Attempted KMSDRM_gbm_create_device(fd=%d), result = %p", viddata->drm_fd, viddata->gbm_dev);
-	
     if (!viddata->gbm_dev) {
         result = SDL_SetError("Couldn't create gbm device.");
     } else {
@@ -1810,23 +1772,6 @@ bool KMSDRM_CreateSurfaces(SDL_VideoDevice *_this, SDL_Window *window)
     SDL_WindowData *windata = window->internal;
     SDL_VideoDisplay *display = SDL_GetVideoDisplayForWindow(window);
     SDL_DisplayData *dispdata = display->internal;
-	
-	SDL_Log("KMSDRM: Entered KMSDRM_CreateSurfaces()");
-    SDL_Log("KMSDRM: GBM device = %p", viddata->gbm_dev);
-    SDL_Log("KMSDRM: Mode: %dx%d", dispdata->mode.hdisplay, dispdata->mode.vdisplay);
-
-    if ((uintptr_t)viddata->gbm_dev == 0x1) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: GBM device is mocked; skipping GBM surface creation.");
-        return 0;
-    }
-
-    if (!viddata->gbm_dev) {
-        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: GBM device is NULL — surface creation impossible.");
-        return SDL_SetError("KMSDRM: Missing GBM device");
-    }
-
-    /* Optional: log here before gbm_surface_create call */
-    SDL_Log("KMSDRM: Proceeding to create gbm_surface...");
 
     uint32_t surface_fmt = GBM_FORMAT_ARGB8888;
     uint32_t surface_flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING;
@@ -1870,22 +1815,23 @@ bool KMSDRM_CreateSurfaces(SDL_VideoDevice *_this, SDL_Window *window)
     /* We can't get the EGL context yet because SDL_CreateRenderer has not been called,
        but we need an EGL surface NOW, or GL won't be able to render into any surface
        and we won't see the first frame. */
-    SDL_EGL_SetRequiredVisualId(_this, surface_fmt);
-    windata->egl_surface = SDL_EGL_CreateSurface(_this, window, (NativeWindowType)windata->gs);
+    if (SDL_GetHintBoolean("SDL_KMSDRM_SKIP_EGL_SURFACE", false)) {
+        windata->egl_surface = EGL_NO_SURFACE;
+        SDL_LogInfo(SDL_LOG_CATEGORY_VIDEO, "Skipping EGL surface creation due to SDL_KMSDRM_SKIP_EGL_SURFACE hint.");
+    } else {
+        SDL_EGL_SetRequiredVisualId(_this, surface_fmt);
+        windata->egl_surface = SDL_EGL_CreateSurface(_this, window, (NativeWindowType)windata->gs);
 
-    if (windata->egl_surface == EGL_NO_SURFACE) {
-        result = SDL_SetError("Could not create EGL window surface");
-        goto cleanup;
+        if (windata->egl_surface == EGL_NO_SURFACE) {
+            result = SDL_SetError("Could not create EGL window surface");
+            goto cleanup;
+        }
+
+        /* Current context passing to EGL is now done here. If something fails,
+        go back to delayed SDL_EGL_MakeCurrent() call in SwapWindow. */
+        egl_context = (EGLContext)SDL_GL_GetCurrentContext();
+        result = SDL_EGL_MakeCurrent(_this, windata->egl_surface, egl_context);
     }
-
-    /* Current context passing to EGL is now done here. If something fails,
-       go back to delayed SDL_EGL_MakeCurrent() call in SwapWindow. */
-    egl_context = (EGLContext)SDL_GL_GetCurrentContext();
-    result = SDL_EGL_MakeCurrent(_this, windata->egl_surface, egl_context);
-
-    // Initialize BGFX to render into this GBM surface/context (once).
-//InitBGFXWithGBM(viddata->gbm_dev, windata->gs,
-//                dispdata->mode.hdisplay, dispdata->mode.vdisplay);
 
     SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED,
                         dispdata->mode.hdisplay, dispdata->mode.vdisplay);
@@ -1954,6 +1900,7 @@ bool KMSDRM_VideoInit(SDL_VideoDevice *_this)
     if (!KMSDRM_InitDisplays(_this)) {
         result = SDL_SetError("error getting KMSDRM displays information");
     }
+    viddata->is_atomic = false; // VPINBALL: Force legacy path for RK3588/Mali
 
 #ifdef SDL_INPUT_LINUXEV
     SDL_EVDEV_Init();
@@ -1989,7 +1936,6 @@ void KMSDRM_VideoQuit(SDL_VideoDevice *_this)
     viddata->num_windows = 0;
     viddata->video_init = false;
 }
-
 
 // Read modes from the connector modes, and store them in display->display_modes.
 bool KMSDRM_GetDisplayModes(SDL_VideoDevice *_this, SDL_VideoDisplay *display)
@@ -2258,6 +2204,9 @@ bool KMSDRM_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Propert
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_KMSDRM_DEVICE_INDEX_NUMBER, viddata->devindex);
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_KMSDRM_DRM_FD_NUMBER, viddata->drm_fd);
     SDL_SetPointerProperty(props, SDL_PROP_WINDOW_KMSDRM_GBM_DEVICE_POINTER, viddata->gbm_dev);
+    // VPINBALL: Export GBM surface and CRTC ID for direct page-flip access
+    SDL_SetPointerProperty(props, "SDL.window.kmsdrm.gbm_surface", windata->gs);
+    SDL_SetNumberProperty(props, "SDL.window.kmsdrm.crtc_id", (Sint64)dispdata->crtc.crtc->crtc_id);
 
     if ((window->flags & SDL_WINDOW_NOT_FOCUSABLE) == 0) {
         /* Focus on the newly created window.
