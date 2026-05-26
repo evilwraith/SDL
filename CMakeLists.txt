@@ -60,6 +60,7 @@ endif()
 include(CheckLibraryExists)
 include(CheckIncludeFiles)
 include(CheckIncludeFile)
+include(CheckIncludeFiles)
 include(CheckLanguage)
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
@@ -241,7 +242,7 @@ if(USE_GCC OR USE_CLANG OR USE_INTELCC OR USE_QCC)
 endif()
 
 # Default option knobs
-if(UNIX OR MINGW OR MSYS OR (USE_CLANG AND NOT WINDOWS) OR VITA OR PSP OR PS2 OR N3DS OR SDL_CPU_ARM64EC)
+if(UNIX OR MINGW OR MSYS OR OS2 OR (USE_CLANG AND NOT WINDOWS) OR VITA OR PSP OR PS2 OR N3DS OR SDL_CPU_ARM64EC)
   set(OPT_DEF_LIBC ON)
 endif()
 if(WINDOWS OR MACOS OR IOS OR TVOS OR VISIONOS OR WATCHOS)
@@ -1087,7 +1088,7 @@ if(SDL_LIBC)
             strtod malloc calloc realloc free getenv setenv putenv unsetenv
             bsearch qsort abs bcopy memset memcpy memmove memcmp strlen strlcpy strlcat
             _strrev _strupr _strlwr index rindex strchr strrchr strstr strtok_r
-            itoa _ltoa _uitoa _ultoa strtol strtoul _i64toa _ui64toa strtoll strtoull
+            itoa _ltoa _ultoa strtol strtoul _i64toa _ui64toa strtoll strtoull
             atoi atof strcmp strncmp _stricmp strcasecmp _strnicmp strncasecmp strcasestr
             wcscmp _wcsdup wcsdup wcslcat wcslcpy wcslen wcsncmp wcsstr
             wcscasecmp _wcsicmp wcsncasecmp _wcsnicmp
@@ -2801,6 +2802,7 @@ elseif(PS2)
     gskit
     dmakit
     ps2_drivers
+    atomic
   )
 
 elseif(OS2)

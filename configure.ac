@@ -359,7 +359,7 @@ dnl Checks for library functions.
         AC_DEFINE(HAVE_MPROTECT, 1, [ ])
         ],[]),
     )
-    AC_CHECK_FUNCS(malloc calloc realloc free getenv setenv putenv unsetenv bsearch qsort abs bcopy memset memcmp memcpy memmove wcslen wcslcpy wcslcat _wcsdup wcsdup wcsstr wcscmp wcsncmp wcscasecmp _wcsicmp wcsncasecmp _wcsnicmp strlen strlcpy strlcat _strrev _strupr _strlwr index rindex strchr strrchr strstr strtok_r itoa _ltoa _uitoa _ultoa strtod strtol strtoul _i64toa _ui64toa strtoll strtoull atoi atof strcmp strncmp _stricmp strcasecmp _strnicmp strncasecmp strcasestr vsscanf vsnprintf fopen64 fseeko fseeko64 sigaction sigtimedwait setjmp nanosleep sysconf sysctlbyname getauxval elf_aux_info poll memfd_create posix_fallocate _Exit)
+    AC_CHECK_FUNCS(malloc calloc realloc free getenv setenv putenv unsetenv bsearch qsort abs bcopy memset memcmp memcpy memmove wcslen wcslcpy wcslcat _wcsdup wcsdup wcsstr wcscmp wcsncmp wcscasecmp _wcsicmp wcsncasecmp _wcsnicmp strlen strlcpy strlcat _strrev _strupr _strlwr index rindex strchr strrchr strstr strtok_r itoa _ltoa _ultoa strtod strtol strtoul _i64toa _ui64toa strtoll strtoull atoi atof strcmp strncmp _stricmp strcasecmp _strnicmp strncasecmp strcasestr vsscanf vsnprintf fopen64 fseeko fseeko64 sigaction sigtimedwait setjmp nanosleep sysconf sysctlbyname getauxval elf_aux_info poll memfd_create posix_fallocate _Exit)
 
     AC_CHECK_LIB(m, pow, [LIBS="$LIBS -lm"; EXTRA_LDFLAGS="$EXTRA_LDFLAGS -lm"])
     AC_CHECK_FUNCS(acos acosf asin asinf atan atanf atan2 atan2f ceil ceilf copysign copysignf cos cosf exp expf fabs fabsf floor floorf trunc truncf fmod fmodf log logf log10 log10f lround lroundf pow powf round roundf scalbn scalbnf sin sinf sqrt sqrtf tan tanf)
@@ -3484,7 +3484,7 @@ CheckUSBHID()
                 AC_MSG_CHECKING(for usbhid)
                 have_usbhid=no
                 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-                  #include <sys/types.h>
+                  #include <stdint.h>
                   #if defined(HAVE_USB_H)
                   #include <usb.h>
                   #endif
@@ -3513,7 +3513,7 @@ CheckUSBHID()
                     AC_MSG_CHECKING(for ucr_data member of usb_ctl_report)
                     have_usbhid_ucr_data=no
                     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-                      #include <sys/types.h>
+                      #include <stdint.h>
                       #if defined(HAVE_USB_H)
                       #include <usb.h>
                       #endif
@@ -3543,7 +3543,7 @@ CheckUSBHID()
                     AC_MSG_CHECKING(for new usbhid API)
                     have_usbhid_new=no
                     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-                      #include <sys/types.h>
+                      #include <stdint.h>
                       #if defined(HAVE_USB_H)
                       #include <usb.h>
                       #endif
