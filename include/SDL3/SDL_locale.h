@@ -53,7 +53,7 @@ extern "C" {
  * would be "en"), and the country, if not NULL, will be an ISO-3166 country
  * code (so Canada would be "CA").
  *
- * \since This function is available since SDL 3.2.0.
+ * \since This struct is available since SDL 3.2.0.
  *
  * \sa SDL_GetPreferredLocales
  */
@@ -101,6 +101,8 @@ typedef struct SDL_Locale
  *          call SDL_GetError() for more information. This is a single
  *          allocation that should be freed with SDL_free() when it is no
  *          longer needed.
+ *
+ * \threadsafety This function is not thread safe.
  *
  * \since This function is available since SDL 3.2.0.
  */
