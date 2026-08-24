@@ -244,8 +244,6 @@ class JobDetails:
     msys2_packages: list[str] = dataclasses.field(default_factory=list)
     cygwin_packages: list[str] = dataclasses.field(default_factory=list)
     werror: bool = True
-    microsoft_gameinput: bool = False
-    microsoft_gameinput_arch: str = ""
     msvc_vcvars_arch: str = ""
     msvc_vcvars_sdk: str = ""
     msvc_project: str = ""
@@ -316,8 +314,6 @@ class JobDetails:
             "android-mk": self.android_mk,
             "werror": self.werror,
             "sudo": self.sudo,
-            "microsoft-gameinput": self.microsoft_gameinput,
-            "microsoft-gameinput-arch": self.microsoft_gameinput_arch,
             "msvc-vcvars-arch": self.msvc_vcvars_arch,
             "msvc-vcvars-sdk": self.msvc_vcvars_sdk,
             "msvc-project": self.msvc_project,
@@ -483,14 +479,6 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool, ctest_args
                         job.setup_libusb_arch = "x86"
                     case MsvcArch.X64:
                         job.setup_libusb_arch = "x64"
-                job.microsoft_gameinput = True
-                match spec.msvc_arch:
-                    case MsvcArch.X64:
-                        job.microsoft_gameinput_arch = "x64"
-                    case MsvcArch.Arm64:
-                        job.microsoft_gameinput_arch = "arm64"
-                job.cflags.append("-I$GAMEINPUT_INCLUDE")
-                job.cxxflags.append("-I$GAMEINPUT_INCLUDE")
         case SdlPlatform.Linux:
             if spec.name.startswith("Ubuntu"):
                 assert spec.os.value.startswith("ubuntu-")
@@ -726,8 +714,7 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool, ctest_args
         case SdlPlatform.Vita:
             job.ccache = True
             job.sudo = ""
-            job.apt_packages = []
-            job.apk_packages = ["ccache", "cmake", "ninja", "pkgconf", "bash", "tar"]
+            job.apt_packages.extend(["ccache", "cmake", "unzip"])
             job.cmake_toolchain_file = "${VITASDK}/share/vita.toolchain.cmake"
             assert spec.vita_gles is not None
             job.setup_vita_gles_type = {
@@ -737,6 +724,7 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool, ctest_args
             job.cmake_arguments.extend((
                 f"-DVIDEO_VITA_PIB={ 'true' if spec.vita_gles == VitaGLES.Pib else 'false' }",
                 f"-DVIDEO_VITA_PVR={ 'true' if spec.vita_gles == VitaGLES.Pvr else 'false' }",
+                "-DCMAKE_DISABLE_FIND_PACKAGE_FFmpeg=TRUE",  # https://sourceforge.net/p/lame/bugs/526/
                 "-DSDL_ARMNEON=ON",
                 "-DSDL_ARMSIMD=ON",
                 ))
@@ -827,9 +815,6 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool, ctest_args
                 job.msys2_packages.append(f"{msys2_env}-clang-tools-extra")
             if job.ccache:
                 job.msys2_packages.append(f"{msys2_env}-ccache")
-            job.microsoft_gameinput = True
-            job.cflags.append("-I$GAMEINPUT_INCLUDE")
-            job.cxxflags.append("-I$GAMEINPUT_INCLUDE")
         case SdlPlatform.Cygwin:
             job.ccache = False # Missing evict-older-than option
             job.clang_tidy = False # error finding files [clang-diagnostic-error] cause might be space in command path
