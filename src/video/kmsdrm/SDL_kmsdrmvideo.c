@@ -1843,10 +1843,41 @@ bool KMSDRM_CreateSurfaces(SDL_VideoDevice *_this, SDL_Window *window)
          */
         KMSDRM_GetModeToSet(window, &dispdata->mode);
 
-        windata->gs = KMSDRM_gbm_surface_create(viddata->gbm_dev, dispdata->mode.hdisplay, dispdata->mode.vdisplay, surface_fmt, surface_flags);
+        /* VPINBALL/4kp: allow a scanout buffer smaller than the mode, to be upscaled by the display
+           controller's plane scaler (SRC != CRTC in the atomic commit). Both hints must be set and fit
+           inside the mode, or we fall back to the mode size -- a surface larger than the mode cannot be
+           scanned out, and a zero-sized one cannot be created at all.
+
+           Explicit pixel dimensions rather than a scale factor, deliberately: the caller must size its
+           own render targets to match, and a float factor evaluated independently on each side can round
+           differently and silently mismatch the buffer against the backbuffer. */
+        Uint32 surface_w = dispdata->mode.hdisplay;
+        Uint32 surface_h = dispdata->mode.vdisplay;
+        {
+            const char *hint_w = SDL_GetHint("SDL_KMSDRM_SURFACE_WIDTH");
+            const char *hint_h = SDL_GetHint("SDL_KMSDRM_SURFACE_HEIGHT");
+            if (hint_w && hint_h) {
+                const int req_w = SDL_atoi(hint_w);
+                const int req_h = SDL_atoi(hint_h);
+                if (req_w > 0 && req_h > 0 && req_w <= (int)dispdata->mode.hdisplay
+                                           && req_h <= (int)dispdata->mode.vdisplay) {
+                    surface_w = (Uint32)req_w;
+                    surface_h = (Uint32)req_h;
+                    SDL_LogInfo(SDL_LOG_CATEGORY_VIDEO,
+                                "KMSDRM: GBM surface %ux%u for mode %ux%u (plane scales at scanout)",
+                                surface_w, surface_h, dispdata->mode.hdisplay, dispdata->mode.vdisplay);
+                } else {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
+                                "KMSDRM: ignoring surface size hints %sx%s, outside mode %ux%u",
+                                hint_w, hint_h, dispdata->mode.hdisplay, dispdata->mode.vdisplay);
+                }
+            }
+        }
+
+        windata->gs = KMSDRM_gbm_surface_create(viddata->gbm_dev, surface_w, surface_h, surface_fmt, surface_flags);
         if (!windata->gs && errno == ENOSYS) {
             // Try again without the scanout flags, needed on NVIDIA drivers
-            windata->gs = KMSDRM_gbm_surface_create(viddata->gbm_dev, dispdata->mode.hdisplay, dispdata->mode.vdisplay, surface_fmt, 0);
+            windata->gs = KMSDRM_gbm_surface_create(viddata->gbm_dev, surface_w, surface_h, surface_fmt, 0);
         }
         if (!windata->gs) {
             SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "KMSDRM: gbm_surface_create(GBM_FORMAT_%s) failed.", gbm_formats[i].name);
