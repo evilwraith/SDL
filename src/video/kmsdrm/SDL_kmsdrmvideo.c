@@ -1545,7 +1545,15 @@ static bool KMSDRM_GBMInit(SDL_VideoDevice *_this, SDL_DisplayData *dispdata)
         }
     }
 
-    viddata->is_atomic = set_client_atomic_caps(viddata->drm_fd);
+    /* VPINBALL: stay on the legacy modesetting path, consistently with KMSDRM_InitDisplays() and
+       KMSDRM_VideoInit(). This site used to call set_client_atomic_caps() and so silently put the
+       fd back into atomic mode, on a possibly REOPENED fd, undoing the force-legacy above.
+
+       UNIVERSAL_PLANES must still be enabled: setup_plane() below looks the primary plane up by
+       DRM_PLANE_TYPE, and that property is only exposed once the cap is set. Dropping it makes
+       GBMInit fail with "can't find suitable display plane". Only ATOMIC is withheld. */
+    KMSDRM_drmSetClientCap(viddata->drm_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+    viddata->is_atomic = false;
 
     // Set the FD as current DRM master.
     KMSDRM_drmSetMaster(viddata->drm_fd);
@@ -2316,6 +2324,33 @@ void KMSDRM_RestoreWindow(SDL_VideoDevice *_this, SDL_Window *window)
 bool KMSDRM_SetWindowFocusable(SDL_VideoDevice *_this, SDL_Window *window, bool focusable)
 {
     return true;  // this just has to exist or SDL_SetWindowFocusable() will refuse to change the window flag.
+}
+
+/* VPINBALL: implementation of the helper declared in <SDL3/SDL_kmsdrm_helpers.h>.
+   It was declared in the public header and registered in the dynapi (SDL_dynapi.sym /
+   SDL_dynapi_procs.h) but never defined, so linking libSDL3.so failed with
+   "undefined reference to SDL_KMSDRM_GetGBMHandles_REAL".
+
+   Reads the same window properties KMSDRM_CreateWindow() publishes, so it needs no access to
+   driver-internal structs and returns exactly what the property path would. */
+int SDL_KMSDRM_GetGBMHandles(SDL_Window *window, void **out_dev, void **out_surf)
+{
+    void *dev = NULL, *surf = NULL;
+
+    if (window) {
+        const SDL_PropertiesID props = SDL_GetWindowProperties(window);
+        dev = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_KMSDRM_GBM_DEVICE_POINTER, NULL);
+        surf = SDL_GetPointerProperty(props, "SDL.window.kmsdrm.gbm_surface", NULL);
+    }
+
+    if (out_dev) {
+        *out_dev = dev;
+    }
+    if (out_surf) {
+        *out_surf = surf;
+    }
+
+    return (dev && surf) ? 0 : -1;
 }
 
 #endif // SDL_VIDEO_DRIVER_KMSDRM
