@@ -128,11 +128,14 @@
  * [blog post](https://moonside.games/posts/layers-all-the-way-down/)
  * explaining this situation.
  *
- * It is optimal for apps to pre-compile the shader formats they might use,
- * but for ease of use SDL provides a separate project,
+ * Shader binaries can be compiled using standard Vulkan, Direct3D or Metal
+ * tooling, but SDL provides a separate project,
  * [SDL_shadercross](https://github.com/libsdl-org/SDL_shadercross)
- * , for performing runtime shader cross-compilation. It also has a CLI
- * interface for offline precompilation as well.
+ * , as a convenient command-line wrapper for cross-compiling shaders from
+ * HLSL or SPIR-V to any backend format (SPIR-V, DXBC, DXIL, MSL).
+ *
+ * While offline ahead-of-time compilation is preferred, SDL_shadercross is
+ * also able to operate as a runtime library for advanced usecases.
  *
  * This is an extremely quick overview that leaves out several important
  * details. Already, though, one can see that GPU programming can be quite
@@ -1110,7 +1113,10 @@ typedef enum SDL_GPUVertexElementFormat
 
     /* 16-bit Floats */
     SDL_GPU_VERTEXELEMENTFORMAT_HALF2,
-    SDL_GPU_VERTEXELEMENTFORMAT_HALF4
+    SDL_GPU_VERTEXELEMENTFORMAT_HALF4,
+
+    /* 10-bit Unsigned Normalized */
+    SDL_GPU_VERTEXELEMENTFORMAT_R10G10B10A2_UNORM
 } SDL_GPUVertexElementFormat;
 
 /**
@@ -1418,6 +1424,7 @@ typedef struct SDL_GPUViewport
  *
  * \sa SDL_UploadToGPUTexture
  * \sa SDL_DownloadFromGPUTexture
+ * \sa SDL_GPUTransferBuffer
  */
 typedef struct SDL_GPUTextureTransferInfo
 {
@@ -1436,6 +1443,7 @@ typedef struct SDL_GPUTextureTransferInfo
  *
  * \sa SDL_UploadToGPUBuffer
  * \sa SDL_DownloadFromGPUBuffer
+ * \sa SDL_GPUTransferBuffer
  */
 typedef struct SDL_GPUTransferBufferLocation
 {
@@ -1451,6 +1459,7 @@ typedef struct SDL_GPUTransferBufferLocation
  * \since This struct is available since SDL 3.2.0.
  *
  * \sa SDL_CopyGPUTextureToTexture
+ * \sa SDL_GPUTexture
  */
 typedef struct SDL_GPUTextureLocation
 {
@@ -1472,6 +1481,7 @@ typedef struct SDL_GPUTextureLocation
  * \sa SDL_UploadToGPUTexture
  * \sa SDL_DownloadFromGPUTexture
  * \sa SDL_CreateGPUTexture
+ * \sa SDL_GPUTexture
  */
 typedef struct SDL_GPUTextureRegion
 {
@@ -1492,6 +1502,7 @@ typedef struct SDL_GPUTextureRegion
  * \since This struct is available since SDL 3.2.0.
  *
  * \sa SDL_BlitGPUTexture
+ * \sa SDL_GPUTexture
  */
 typedef struct SDL_GPUBlitRegion
 {
@@ -1718,6 +1729,7 @@ typedef struct SDL_GPUStencilOpState
  *
  * \since This struct is available since SDL 3.2.0.
  *
+ * \sa SDL_SetGPUBlendConstants
  * \sa SDL_GPUColorTargetDescription
  * \sa SDL_GPUBlendFactor
  * \sa SDL_GPUBlendOp
@@ -1869,6 +1881,7 @@ typedef struct SDL_GPURasterizerState
  * \since This struct is available since SDL 3.2.0.
  *
  * \sa SDL_GPUGraphicsPipelineCreateInfo
+ * \sa SDL_GPUSampleCount
  */
 typedef struct SDL_GPUMultisampleState
 {
@@ -2117,6 +2130,11 @@ typedef struct SDL_GPUDepthStencilTargetInfo
  * \since This struct is available since SDL 3.2.0.
  *
  * \sa SDL_BlitGPUTexture
+ * \sa SDL_GPUBlitRegion
+ * \sa SDL_GPULoadOp
+ * \sa SDL_FColor
+ * \sa SDL_FlipMode
+ * \sa SDL_GPUFilter
  */
 typedef struct SDL_GPUBlitInfo {
     SDL_GPUBlitRegion source;       /**< The source region for the blit. */
@@ -3721,6 +3739,9 @@ extern SDL_DECLSPEC void SDLCALL SDL_BindGPUIndexBuffer(
  *
  * The textures must have been created with SDL_GPU_TEXTUREUSAGE_SAMPLER.
  *
+ * The textures being bound must have a matching type declared in the shader
+ * (2D, 3D, etc.). Multisample textures are not allowed.
+ *
  * Be sure your shader is set up according to the requirements documented in
  * SDL_CreateGPUShader().
  *
@@ -3746,6 +3767,9 @@ extern SDL_DECLSPEC void SDLCALL SDL_BindGPUVertexSamplers(
  *
  * These textures must have been created with
  * SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ.
+ *
+ * The textures being bound must have a matching type declared in the shader
+ * (2D, 3D, 2DMS, etc.)
  *
  * Be sure your shader is set up according to the requirements documented in
  * SDL_CreateGPUShader().
@@ -3794,6 +3818,9 @@ extern SDL_DECLSPEC void SDLCALL SDL_BindGPUVertexStorageBuffers(
  *
  * The textures must have been created with SDL_GPU_TEXTUREUSAGE_SAMPLER.
  *
+ * The textures being bound must have a matching type declared in the shader
+ * (2D, 3D, etc.). Multisample textures are not allowed.
+ *
  * Be sure your shader is set up according to the requirements documented in
  * SDL_CreateGPUShader().
  *
@@ -3819,6 +3846,9 @@ extern SDL_DECLSPEC void SDLCALL SDL_BindGPUFragmentSamplers(
  *
  * These textures must have been created with
  * SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ.
+ *
+ * The textures being bound must have a matching type declared in the shader
+ * (2D, 3D, 2DMS, etc.)
  *
  * Be sure your shader is set up according to the requirements documented in
  * SDL_CreateGPUShader().
@@ -4042,6 +4072,9 @@ extern SDL_DECLSPEC void SDLCALL SDL_BindGPUComputePipeline(
  *
  * The textures must have been created with SDL_GPU_TEXTUREUSAGE_SAMPLER.
  *
+ * The textures being bound must have a matching type declared in the shader
+ * (2D, 3D, etc.). Multisample textures are not allowed.
+ *
  * Be sure your shader is set up according to the requirements documented in
  * SDL_CreateGPUComputePipeline().
  *
@@ -4067,6 +4100,9 @@ extern SDL_DECLSPEC void SDLCALL SDL_BindGPUComputeSamplers(
  *
  * These textures must have been created with
  * SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ.
+ *
+ * The textures being bound must have a matching type declared in the shader
+ * (2D, 3D, 2DMS, etc.)
  *
  * Be sure your shader is set up according to the requirements documented in
  * SDL_CreateGPUComputePipeline().
