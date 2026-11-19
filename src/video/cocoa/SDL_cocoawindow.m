@@ -782,7 +782,7 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
 {
     SDL_Mouse *mouse = SDL_GetMouse();
 
-    if (mouse->cursor_visible && mouse->cur_cursor && !mouse->relative_mode) {
+    if (mouse->cursor_visible && mouse->cur_cursor && !(mouse->relative_mode && mouse->relative_mode_hide_cursor)) {
         SDL_CursorData *cdata = mouse->cur_cursor->internal;
 
         if (cdata) {
@@ -825,6 +825,15 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
     isDragAreaRunning = NO;
     pendingWindowWarpX = pendingWindowWarpY = FLT_MAX;
     liveResizeTimer = nil;
+
+    const NSTimeInterval interval = 1.0 / 60.0;
+    moveTimer = [NSTimer timerWithTimeInterval:interval
+                                       repeats:TRUE
+                                         block:^(NSTimer *unusedTimer)
+    {
+        SDL_OnWindowLiveResizeUpdate(self->_data.window);
+    }];
+    [[NSRunLoop currentRunLoop] addTimer:moveTimer forMode:@"_NSMoveTimerRunLoopMode"];
 
     center = [NSNotificationCenter defaultCenter];
 
@@ -987,6 +996,11 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
     NSNotificationCenter *center;
     NSWindow *window = _data.nswindow;
     NSView *view = [window contentView];
+
+    [liveResizeTimer invalidate];
+    liveResizeTimer = nil;
+    [moveTimer invalidate];
+    moveTimer = nil;
 
     center = [NSNotificationCenter defaultCenter];
 
@@ -1438,6 +1452,9 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
 
     _data.was_zoomed = !!(window->flags & SDL_WINDOW_MAXIMIZED);
 
+    // Fullscreen windows are always opaque, make it opaque before the animation starts
+    [_data.nswindow setAlphaValue:1.0];
+
     isFullscreenSpace = YES;
     inFullscreenTransition = YES;
 }
@@ -1453,9 +1470,15 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
  */
 - (void)windowDidFailToEnterFullScreen:(NSNotification *)aNotification
 {
+    SDL_Window *window = _data.window;
+
     inFullscreenTransition = NO;
     isFullscreenSpace = NO;
     [self clearAllPendingWindowOperations];
+
+    if (!(window->flags & SDL_WINDOW_FULLSCREEN)) {
+        [_data.nswindow setAlphaValue:window->opacity];
+    }
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification *)aNotification
@@ -2495,7 +2518,7 @@ bool Cocoa_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properti
             rect.origin.y -= screenRect.origin.y;
 
             // Constrain the popup
-            if (SDL_WINDOW_IS_POPUP(window) && window->constrain_popup) {
+            if (SDL_WINDOW_IS_POPUP(window) && window->constrain_popup && screen) {
                 if (rect.origin.x + rect.size.width > screenRect.origin.x + screenRect.size.width) {
                     rect.origin.x -= (rect.origin.x + rect.size.width) - (screenRect.origin.x + screenRect.size.width);
                 }
@@ -2561,7 +2584,7 @@ bool Cocoa_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properti
             _this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) {
             [nsview setWantsLayer:TRUE];
             if ((window->flags & SDL_WINDOW_HIGH_PIXEL_DENSITY)) {
-                nsview.layer.contentsScale = nswindow.screen.backingScaleFactor;
+                nsview.layer.contentsScale = nswindow.backingScaleFactor;
             } else {
                 nsview.layer.contentsScale = 1;
             }
@@ -2838,7 +2861,7 @@ void Cocoa_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
             }
 
             if (new_focus) {
-                NSWindow *newkey = ((__bridge SDL_CocoaWindowData *)window->internal).nswindow;
+                NSWindow *newkey = ((__bridge SDL_CocoaWindowData *)new_focus->internal).nswindow;
                 [newkey makeKeyAndOrderFront:nil];
             }
         }

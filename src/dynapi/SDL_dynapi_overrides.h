@@ -1348,3 +1348,6 @@
 #define SDL_SetRenderHDRHeadroom SDL_SetRenderHDRHeadroom_REAL
 #define SDL_GetRenderHDRHeadroom SDL_GetRenderHDRHeadroom_REAL
 #define SDL_KMSDRM_GetGBMHandles SDL_KMSDRM_GetGBMHandles_REAL
+#define SDL_GetCurrentThreadName SDL_GetCurrentThreadName_REAL
+#define SDL_LoadTexture_IO SDL_LoadTexture_IO_REAL
+#define SDL_LoadTexture SDL_LoadTexture_REAL
